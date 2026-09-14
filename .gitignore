@@ -8,6 +8,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Base de datos local (SQLite)
+*.db
+
 # Configuración de editores
 .vscode/
 .idea/
