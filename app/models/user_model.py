@@ -9,6 +9,7 @@ la entrada y salida de datos en la API.
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy.orm import relationship
 
 from app.database.connection import Base
 
@@ -24,3 +25,6 @@ class User(Base):
     role = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Un usuario puede tener muchos préstamos
+    loans = relationship("Loan", back_populates="user")
