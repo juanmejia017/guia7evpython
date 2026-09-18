@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Request
 
+from app.routes.device_routes import router as device_router
+from app.routes.loan_routes import router as loan_router
 from app.routes.user_routes import router as user_router
 
 # A partir de esta versión, el esquema de la base de datos ya no se crea con
@@ -27,5 +29,7 @@ async def add_custom_headers(request: Request, call_next):
 def read_root():
     return {"message": "Bienvenido a device_systems API. Ve a /docs para ver la documentación interactiva."}
 
-# Incluir las rutas del CRUD de usuarios
+# Incluir las rutas de users, devices y loans
 app.include_router(user_router)
+app.include_router(device_router)
+app.include_router(loan_router)

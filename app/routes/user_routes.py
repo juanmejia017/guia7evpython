@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.database_dependency import get_db
+from app.schemas.loan_schema import LoanDetailResponse
 from app.schemas.user_schema import RoleEnum, UserCreate, UserPatch, UserResponse, UserUpdate
-from app.services import user_service
+from app.services import loan_service, user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -38,6 +39,21 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
     return db_user
+
+
+@router.get(
+    "/{user_id}/loans",
+    response_model=List[LoanDetailResponse],
+    summary="Consultar los préstamos (dispositivos) asociados a un usuario",
+)
+def get_user_loans(user_id: int, db: Session = Depends(get_db)):
+    """Retorna los préstamos del usuario, con datos básicos del dispositivo asociado."""
+    db_user = user_service.get_user_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    loans = loan_service.get_loans(db, user_id=user_id)
+    return [loan_service.to_loan_detail(loan) for loan in loans]
 
 
 @router.put("/{user_id}", response_model=UserResponse)
