@@ -58,6 +58,28 @@ def read_root():
     return {"message": "Bienvenido a device_systems API. Ve a /docs para ver la documentación interactiva."}
 
 
+@app.get("/security/policy", tags=["Security"], summary="Consultar la política de seguridad de la API")
+def security_policy():
+    """
+    Expone, de forma pública, un resumen no sensible de los mecanismos de
+    seguridad activos en la API (sin revelar secretos): algoritmo de firma
+    JWT, duración del token, orígenes CORS permitidos y límites de tasa
+    configurados.
+    """
+    return {
+        "authentication": "OAuth2 Password Flow + JWT (Bearer token)",
+        "jwt_algorithm": "HS256",
+        "password_hashing": "bcrypt (via passlib)",
+        "cors_allowed_origins": CORS_ALLOWED_ORIGINS,
+        "rate_limits": {
+            "POST /auth/login": "5/minute",
+            "POST /auth/register": "3/minute",
+            "GET /users": "30/minute",
+            "POST /loans": "10/minute",
+        },
+    }
+
+
 # Incluir las rutas de auth, users, devices y loans
 app.include_router(auth_router)
 app.include_router(user_router)
