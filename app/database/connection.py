@@ -11,8 +11,7 @@ Este módulo expone:
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# URL de conexión a la base de datos SQLite (archivo local device_systems.db)
-DATABASE_URL = "sqlite:///./device_systems.db"
+from app.config import DATABASE_URL
 
 # connect_args es necesario únicamente para SQLite, ya que por defecto
 # solo permite el uso del mismo hilo que creó la conexión.
