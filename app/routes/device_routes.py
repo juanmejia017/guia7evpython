@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.dependencies.auth_dependency import require_admin, require_admin_or_support
 from app.dependencies.database_dependency import get_db
 from app.schemas.device_schema import (
     DeviceCreate,
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/devices", tags=["Devices"])
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un nuevo dispositivo",
     response_description="Dispositivo creado correctamente",
+    dependencies=[Depends(require_admin_or_support)],
 )
 def create_device(device: DeviceCreate, db: Session = Depends(get_db)):
     """Crea un dispositivo, validando que el número de serie no esté duplicado."""
@@ -77,7 +79,12 @@ def get_device(device_id: int, db: Session = Depends(get_db)):
     return db_device
 
 
-@router.put("/{device_id}", response_model=DeviceResponse, summary="Reemplazar un dispositivo completo")
+@router.put(
+    "/{device_id}",
+    response_model=DeviceResponse,
+    summary="Reemplazar un dispositivo completo",
+    dependencies=[Depends(require_admin_or_support)],
+)
 def update_device(device_id: int, device: DeviceUpdate, db: Session = Depends(get_db)):
     db_device = device_service.get_device_by_id(db, device_id)
     if not db_device:
@@ -90,7 +97,12 @@ def update_device(device_id: int, device: DeviceUpdate, db: Session = Depends(ge
     return device_service.update_device(db, db_device, device)
 
 
-@router.patch("/{device_id}", response_model=DeviceResponse, summary="Actualizar un dispositivo parcialmente")
+@router.patch(
+    "/{device_id}",
+    response_model=DeviceResponse,
+    summary="Actualizar un dispositivo parcialmente",
+    dependencies=[Depends(require_admin_or_support)],
+)
 def patch_device(device_id: int, device: DevicePatch, db: Session = Depends(get_db)):
     db_device = device_service.get_device_by_id(db, device_id)
     if not db_device:
@@ -108,7 +120,12 @@ def patch_device(device_id: int, device: DevicePatch, db: Session = Depends(get_
     return device_service.patch_device(db, db_device, device)
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar un dispositivo")
+@router.delete(
+    "/{device_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar un dispositivo",
+    dependencies=[Depends(require_admin)],
+)
 def delete_device(device_id: int, db: Session = Depends(get_db)):
     db_device = device_service.get_device_by_id(db, device_id)
     if not db_device:

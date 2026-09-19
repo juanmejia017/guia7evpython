@@ -1,9 +1,11 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.dependencies.auth_dependency import get_current_active_user, require_admin_or_support
 from app.dependencies.database_dependency import get_db
+from app.rate_limiter import limiter
 from app.schemas.device_schema import DeviceTypeEnum
 from app.schemas.loan_schema import LoanCreate, LoanDetailResponse, LoanResponse, LoanStatusEnum
 from app.services import device_service, loan_service, user_service
@@ -17,8 +19,10 @@ router = APIRouter(prefix="/loans", tags=["Loans"])
     status_code=status.HTTP_201_CREATED,
     summary="Registrar un préstamo",
     response_description="Préstamo creado; el dispositivo queda marcado como no disponible",
+    dependencies=[Depends(get_current_active_user)],
 )
-def create_loan(loan: LoanCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def create_loan(request: Request, loan: LoanCreate, db: Session = Depends(get_db)):
     """
     Crea un préstamo validando que:
     - el usuario exista,
@@ -45,6 +49,7 @@ def create_loan(loan: LoanCreate, db: Session = Depends(get_db)):
     "/details",
     response_model=List[LoanDetailResponse],
     summary="Listar préstamos con información relacionada (join de usuario y dispositivo)",
+    dependencies=[Depends(require_admin_or_support)],
 )
 def get_loans_details(
     status_: Optional[LoanStatusEnum] = Query(None, alias="status", description="Filtra por estado del préstamo"),
@@ -71,6 +76,7 @@ def get_loans_details(
     response_model=List[LoanDetailResponse],
     summary="Listar préstamos",
     response_description="Lista de préstamos con filtros opcionales por usuario, dispositivo, estado o correo",
+    dependencies=[Depends(require_admin_or_support)],
 )
 def get_loans(
     status_: Optional[LoanStatusEnum] = Query(None, alias="status", description="Filtra por estado del préstamo"),
@@ -90,7 +96,12 @@ def get_loans(
     )
 
 
-@router.get("/{loan_id}", response_model=LoanDetailResponse, summary="Consultar un préstamo por ID")
+@router.get(
+    "/{loan_id}",
+    response_model=LoanDetailResponse,
+    summary="Consultar un préstamo por ID",
+    dependencies=[Depends(get_current_active_user)],
+)
 def get_loan(loan_id: int, db: Session = Depends(get_db)):
     db_loan = loan_service.get_loan_by_id(db, loan_id)
     if not db_loan:
@@ -103,6 +114,7 @@ def get_loan(loan_id: int, db: Session = Depends(get_db)):
     response_model=LoanResponse,
     summary="Registrar la devolución de un préstamo",
     response_description="Préstamo marcado como devuelto; el dispositivo vuelve a estar disponible",
+    dependencies=[Depends(require_admin_or_support)],
 )
 def return_loan(loan_id: int, db: Session = Depends(get_db)):
     """
