@@ -22,6 +22,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), nullable=False)
     email = Column(String, unique=True, nullable=False, index=True)
+    # Nunca se expone en los schemas de respuesta (UserResponse no la incluye)
+    hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

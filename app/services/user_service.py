@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
+from app.auth.security import get_password_hash
 from app.models.user_model import User
 from app.schemas.user_schema import UserCreate, UserPatch, UserUpdate
 
@@ -54,9 +55,20 @@ def get_users(
     return query.all()
 
 
-def create_user(db: Session, user: UserCreate) -> User:
-    """Crea y persiste un nuevo usuario en la base de datos."""
-    new_user = User(**user.model_dump())
+def create_user(db: Session, user: UserCreate, role_override: Optional[str] = None) -> User:
+    """
+    Crea y persiste un nuevo usuario en la base de datos, hasheando su
+    contraseña antes de guardarla (nunca se almacena en texto plano).
+
+    `role_override` permite forzar un rol (por ejemplo, "user" para el
+    auto-registro público en /auth/register), ignorando el que venga en
+    el payload si se necesita.
+    """
+    user_data = user.model_dump(exclude={"password"})
+    if role_override is not None:
+        user_data["role"] = role_override
+
+    new_user = User(**user_data, hashed_password=get_password_hash(user.password))
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -65,8 +77,13 @@ def create_user(db: Session, user: UserCreate) -> User:
 
 def update_user(db: Session, db_user: User, user: UserUpdate) -> User:
     """Reemplaza por completo los datos de un usuario existente."""
-    for field, value in user.model_dump().items():
+    update_data = user.model_dump(exclude={"password"})
+    for field, value in update_data.items():
         setattr(db_user, field, value)
+
+    if user.password:
+        db_user.hashed_password = get_password_hash(user.password)
+
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -74,9 +91,13 @@ def update_user(db: Session, db_user: User, user: UserUpdate) -> User:
 
 def patch_user(db: Session, db_user: User, user: UserPatch) -> User:
     """Actualiza parcialmente un usuario, solo con los campos enviados."""
-    update_data = user.model_dump(exclude_unset=True)
+    update_data = user.model_dump(exclude_unset=True, exclude={"password"})
     for field, value in update_data.items():
         setattr(db_user, field, value)
+
+    if user.password:
+        db_user.hashed_password = get_password_hash(user.password)
+
     db.commit()
     db.refresh(db_user)
     return db_user
