@@ -1,9 +1,11 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.dependencies.auth_dependency import get_current_active_user, require_admin
 from app.dependencies.database_dependency import get_db
+from app.rate_limiter import limiter
 from app.schemas.loan_schema import LoanDetailResponse
 from app.schemas.user_schema import RoleEnum, UserCreate, UserPatch, UserResponse, UserUpdate
 from app.services import loan_service, user_service
@@ -11,7 +13,13 @@ from app.services import loan_service, user_service
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+    summary="Registrar un usuario (uso administrativo)",
+)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     # Validar correo repetido
     if user_service.get_user_by_email(db, user.email):
@@ -20,13 +28,16 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=List[UserResponse])
+@limiter.limit("30/minute")
 def get_users(
+    request: Request,
     role: Optional[RoleEnum] = None,
     is_active: Optional[bool] = None,
     order_by: Optional[str] = Query(
         None, description="Orden: name, -name, created_at, -created_at"
     ),
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
 ):
     return user_service.get_users(
         db, role=role.value if role else None, is_active=is_active, order_by=order_by
@@ -34,7 +45,7 @@ def get_users(
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
     db_user = user_service.get_user_by_id(db, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
@@ -46,7 +57,11 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     response_model=List[LoanDetailResponse],
     summary="Consultar los préstamos (dispositivos) asociados a un usuario",
 )
-def get_user_loans(user_id: int, db: Session = Depends(get_db)):
+def get_user_loans(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
     """Retorna los préstamos del usuario, con datos básicos del dispositivo asociado."""
     db_user = user_service.get_user_by_id(db, user_id)
     if not db_user:
@@ -56,7 +71,7 @@ def get_user_loans(user_id: int, db: Session = Depends(get_db)):
     return [loan_service.to_loan_detail(loan) for loan in loans]
 
 
-@router.put("/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_admin)])
 def update_user(user_id: int, user: UserUpdate, db: Session = Depends(get_db)):
     db_user = user_service.get_user_by_id(db, user_id)
     if not db_user:
@@ -70,7 +85,7 @@ def update_user(user_id: int, user: UserUpdate, db: Session = Depends(get_db)):
     return user_service.update_user(db, db_user, user)
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.patch("/{user_id}", response_model=UserResponse, dependencies=[Depends(require_admin)])
 def patch_user(user_id: int, user: UserPatch, db: Session = Depends(get_db)):
     db_user = user_service.get_user_by_id(db, user_id)
     if not db_user:
@@ -91,7 +106,7 @@ def patch_user(user_id: int, user: UserPatch, db: Session = Depends(get_db)):
     return user_service.patch_user(db, db_user, user)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     db_user = user_service.get_user_by_id(db, user_id)
     if not db_user:
