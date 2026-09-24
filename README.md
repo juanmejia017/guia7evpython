@@ -1,30 +1,29 @@
 # device_systems
 
-API REST desarrollada con **FastAPI**, **SQLAlchemy** y **Alembic** para la
-gestión de **usuarios**, **dispositivos** y **préstamos** dentro del sistema
-`device_systems`, con persistencia real en base de datos, relaciones entre
-modelos y migraciones versionadas.
+API REST desarrollada con **FastAPI**, **SQLAlchemy**, **Alembic** y una capa
+de **seguridad** (OAuth2 + JWT, hashing de contraseñas, CORS, middleware
+personalizado y rate limiting) para la gestión de **usuarios**,
+**dispositivos** y **préstamos** dentro del sistema `device_systems`.
 
 Proyecto realizado para las actividades:
 - **GA1-220501096-01-AA1-EV07 – Fundamentos de FastAPI: API REST para Gestión de Usuarios** (SENA, ADSO).
 - **GA1-220501096-01-AA1-EV09 – FastAPI con SQLAlchemy: Persistencia de Datos y CRUD sobre Base de Datos** (SENA, ADSO).
 - **GA1-220501096-01-AA1-EV10 – FastAPI Avanzado: Migraciones con Alembic, Asociaciones de Modelos y Consultas con Joins** (SENA, ADSO).
+- **GA1-220501096-01-AA1-EV11 – FastAPI Seguridad: Autenticación, Middleware, CORS, Rate Limiting y Validación Avanzada** (SENA, ADSO).
 
 ## Descripción de la aplicación
 
 `device_systems` expone un API REST que permite:
 
-- Gestionar usuarios (`/users`), dispositivos (`/devices`) y préstamos (`/loans`) con CRUD completo donde aplica.
-- Listar usuarios, con filtros opcionales por `role` y `is_active`, y orden por `name` o `created_at` (`order_by`, `-order_by`).
-- Listar dispositivos, con filtros por `device_type`, `is_available`, `brand` y búsqueda libre (`search`) usando `ilike()`.
-- Registrar préstamos, validando que el usuario y el dispositivo existan y que el dispositivo esté disponible; al prestarlo, el dispositivo queda marcado como no disponible.
-- Registrar la devolución de un préstamo (`PATCH /loans/{id}/return`), liberando el dispositivo automáticamente.
-- Consultar préstamos con información relacionada de usuario y dispositivo mediante **joins** (`/loans`, `/loans/details`, `/users/{id}/loans`, `/devices/{id}/loans`), con filtros por `status`, `user_id`, `device_id`, `user_email` o `device_type`.
+- Registrar y autenticar usuarios mediante **OAuth2 + JWT** (`/auth/register`, `/auth/login`, `/auth/me`), con contraseñas hasheadas (bcrypt) que nunca se guardan ni se exponen en texto plano.
+- Proteger rutas sensibles según el usuario esté **autenticado** o tenga un **rol específico** (`admin`, `support`, `user`), devolviendo `401` (sin token/token inválido) o `403` (sin permisos) según corresponda.
+- Gestionar usuarios (`/users`), dispositivos (`/devices`) y préstamos (`/loans`) con CRUD completo donde aplica, con filtros, orden y consultas con `join()`.
+- Registrar préstamos, validando que el usuario y el dispositivo existan y que el dispositivo esté disponible; al prestarlo, el dispositivo queda marcado como no disponible. Al devolverlo, vuelve a estar disponible.
+- Limitar el número de peticiones por IP en endpoints sensibles (**rate limiting** con `slowapi`), respondiendo `429 Too Many Requests` si se supera el límite.
+- Restringir los orígenes que pueden consumir la API desde un navegador (**CORS**) mediante una lista blanca explícita.
+- Agregar trazabilidad a cada petición mediante un **middleware personalizado** (tiempo de respuesta, `X-Request-ID`, logging).
 - Persistir todos los datos en una base de datos **SQLite** mediante el ORM **SQLAlchemy**, versionando los cambios de esquema con **Alembic**.
-- Retornar respuestas estandarizadas mediante `response_model`, ocultando cualquier dato interno que no deba exponerse.
-- Enviar cabeceras HTTP personalizadas en cada respuesta:
-  - `X-App-Name: device_systems`
-  - `X-API-Version: 3.0`
+- Retornar respuestas estandarizadas mediante `response_model`, ocultando cualquier dato interno (como `hashed_password`) que no deba exponerse.
 
 ## Estructura del proyecto
 
@@ -32,30 +31,43 @@ Proyecto realizado para las actividades:
 device_systems/
 ├── app/
 │   ├── main.py
+│   ├── config.py               # Carga variables de entorno (.env)
+│   ├── rate_limiter.py         # Instancia compartida de Limiter (slowapi)
+│   ├── auth/
+│   │   ├── security.py         # Hash de contraseñas y JWT (crear/validar)
+│   │   ├── auth_service.py     # authenticate_user(), generate_token_for_user()
+│   │   └── auth_routes.py      # /auth/register, /auth/login, /auth/me
 │   ├── database/
-│   │   └── connection.py      # engine, SessionLocal y Base declarativa
+│   │   └── connection.py       # engine, SessionLocal y Base declarativa
 │   ├── models/
-│   │   ├── user_model.py      # modelo SQLAlchemy (tabla users)
-│   │   ├── device_model.py    # modelo SQLAlchemy (tabla devices)
-│   │   └── loan_model.py      # modelo SQLAlchemy (tabla loans, FKs a users/devices)
+│   │   ├── user_model.py       # incluye hashed_password
+│   │   ├── device_model.py
+│   │   └── loan_model.py
 │   ├── schemas/
-│   │   ├── user_schema.py     # schemas Pydantic de users
-│   │   ├── device_schema.py   # schemas Pydantic de devices
-│   │   └── loan_schema.py     # schemas Pydantic de loans (incluye LoanDetailResponse)
+│   │   ├── user_schema.py
+│   │   ├── device_schema.py
+│   │   ├── loan_schema.py
+│   │   ├── auth_schema.py      # UserRegister, UserLogin, Token, TokenData
+│   │   └── validators.py       # Validación reutilizable de contraseña fuerte
 │   ├── routes/
-│   │   ├── user_routes.py     # endpoints de /users (incluye /users/{id}/loans)
-│   │   ├── device_routes.py   # endpoints de /devices (incluye /devices/{id}/loans)
-│   │   └── loan_routes.py     # endpoints de /loans (creación, devolución, joins)
+│   │   ├── user_routes.py      # Protegidas con Depends(get_current_active_user) / require_admin
+│   │   ├── device_routes.py    # Protegidas con require_admin_or_support / require_admin
+│   │   └── loan_routes.py      # Protegidas con autenticación y rol
 │   ├── services/
-│   │   ├── user_service.py    # lógica de acceso a datos de users
-│   │   ├── device_service.py  # lógica de acceso a datos de devices
-│   │   └── loan_service.py    # lógica de negocio y consultas con joins de loans
-│   └── dependencies/
-│       └── database_dependency.py  # get_db(): sesión de base de datos por request
+│   │   ├── user_service.py
+│   │   ├── device_service.py
+│   │   └── loan_service.py
+│   ├── dependencies/
+│   │   ├── database_dependency.py
+│   │   └── auth_dependency.py  # get_current_user, get_current_active_user, require_roles
+│   └── middlewares/
+│       └── request_middleware.py  # X-Process-Time, X-Request-ID, logging
 ├── alembic/
-│   ├── env.py                 # configuración de Alembic (URL y metadata de los modelos)
-│   └── versions/               # historial de migraciones generadas
+│   ├── env.py
+│   └── versions/
 ├── alembic.ini
+├── .env                # NO se sube al repo (ver .gitignore)
+├── .env.example        # Plantilla de variables de entorno
 ├── requirements.txt
 └── README.md
 ```
@@ -120,6 +132,117 @@ Las relaciones se definen con `relationship()` y `back_populates()`:
 - **Device ↔ Loan** (uno a muchos): un dispositivo puede aparecer en muchos préstamos históricos (`Device.loans`), y cada préstamo referencia un único dispositivo (`Loan.device`).
 - La integridad referencial se garantiza mediante `ForeignKey("users.id")` y `ForeignKey("devices.id")` en el modelo `Loan`.
 
+## Seguridad: autenticación, autorización y protección de la API
+
+### Variables de entorno (`.env`)
+
+Los secretos (clave JWT, orígenes CORS, URL de base de datos) se cargan desde
+un archivo `.env` mediante `python-dotenv` (ver `app/config.py`). El archivo
+`.env` real **no se sube al repositorio** (está en `.gitignore`); en su lugar
+se versiona `.env.example` como plantilla:
+
+```env
+SECRET_KEY=change-this-secret-key-for-a-real-random-value
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+DATABASE_URL=sqlite:///./device_systems.db
+```
+
+Antes de correr el proyecto, copia `.env.example` como `.env` y genera tu
+propia `SECRET_KEY` (por ejemplo con `python -c "import secrets; print(secrets.token_hex(32))"`).
+
+### Hash de contraseñas (passlib + bcrypt)
+
+Ninguna contraseña se guarda ni se muestra en texto plano. `app/auth/security.py`
+usa `passlib.context.CryptContext` con el esquema `bcrypt` para:
+
+- `get_password_hash(password)`: genera el hash antes de guardar el usuario.
+- `verify_password(plain_password, hashed_password)`: compara la contraseña ingresada en el login contra el hash almacenado.
+
+El campo `hashed_password` del modelo `User` nunca aparece en `UserResponse`
+ni en ningún schema de salida.
+
+### Autenticación OAuth2 + JWT
+
+- `POST /auth/register`: crea una cuenta validando nombre, correo único, contraseña segura y rol permitido. Devuelve el usuario creado (sin contraseña).
+- `POST /auth/login`: recibe `username` (correo) y `password` mediante el formulario estándar `OAuth2PasswordRequestForm`, verifica la contraseña y retorna un token JWT (`access_token`, `token_type: "bearer"`).
+- `GET /auth/me`: retorna los datos del usuario dueño del token enviado en `Authorization: Bearer <token>`.
+
+El token se firma con `python-jose` (`create_access_token`) usando `SECRET_KEY`
+y el algoritmo `HS256`, con expiración configurable (`ACCESS_TOKEN_EXPIRE_MINUTES`,
+30 minutos por defecto). `decode_access_token` valida la firma y expiración al
+recibir cada petición protegida.
+
+### Protección de rutas por rol
+
+`app/dependencies/auth_dependency.py` expone:
+
+- `get_current_user`: decodifica el token y busca el usuario; `401 Unauthorized` si el token falta, es inválido o expiró.
+- `get_current_active_user`: además exige que el usuario esté activo.
+- `require_roles(*roles)` (y sus atajos `require_admin`, `require_admin_or_support`): `403 Forbidden` si el usuario autenticado no tiene el rol requerido.
+
+Rutas protegidas:
+
+| Ruta                          | Protección requerida     |
+|--------------------------------|---------------------------|
+| `GET /users`                  | Usuario autenticado       |
+| `GET /users/{user_id}`        | Usuario autenticado       |
+| `POST /users`, `PUT`, `PATCH`, `DELETE /users/{id}` | Admin |
+| `POST /devices`               | Admin o support            |
+| `PUT /devices/{device_id}`    | Admin o support            |
+| `PATCH /devices/{device_id}`  | Admin o support            |
+| `DELETE /devices/{device_id}` | Admin                      |
+| `POST /loans`                 | Usuario autenticado        |
+| `GET /loans`, `GET /loans/details` | Admin o support        |
+| `GET /loans/{loan_id}`        | Usuario autenticado        |
+| `PATCH /loans/{loan_id}/return` | Admin o support           |
+
+### CORS
+
+`main.py` configura `CORSMiddleware` con una lista blanca explícita de
+orígenes (`CORS_ALLOWED_ORIGINS` en `.env`, por defecto `http://localhost:5173`
+y `http://localhost:3000`), `allow_credentials=True`, `allow_methods=["*"]` y
+`allow_headers=["*"]`.
+
+**¿Por qué no usar `allow_origins=["*"]` en producción cuando hay credenciales?**
+La especificación CORS prohíbe combinar `allow_origins=["*"]` con
+`allow_credentials=True` (el propio navegador rechaza esa combinación), porque
+equivaldría a aceptar peticiones autenticadas, con cookies o headers de
+autorización, desde **cualquier sitio web**, no solo desde el frontend propio.
+Esto abre la puerta a ataques CSRF y a que un sitio malicioso use la sesión de
+un usuario para actuar en su nombre. Por eso se declara una lista explícita de
+orígenes confiables, y se recomienda que en producción `CORS_ALLOWED_ORIGINS`
+contenga únicamente el dominio real del frontend (ej. `https://miapp.com`).
+
+### Middleware personalizado
+
+`app/middlewares/request_middleware.py` agrega a cada respuesta:
+
+- `X-App-Name: device_systems`
+- `X-Process-Time`: tiempo de procesamiento de la petición, en segundos.
+- `X-Request-ID`: identificador único de la petición (se genera o se propaga si el cliente ya envió uno), útil para trazabilidad y depuración.
+
+Además, registra en el logger de la aplicación el método, la ruta, el código
+de estado y el tiempo de cada petición procesada.
+
+### Rate limiting (slowapi)
+
+`app/rate_limiter.py` define una instancia compartida de `Limiter`. Los
+límites configurados son:
+
+| Endpoint              | Límite                  |
+|------------------------|--------------------------|
+| `POST /auth/login`     | 5 solicitudes / minuto   |
+| `POST /auth/register`  | 3 solicitudes / minuto   |
+| `GET /users`           | 30 solicitudes / minuto  |
+| `POST /loans`          | 10 solicitudes / minuto  |
+
+Al superar el límite, la API responde `429 Too Many Requests` con un cuerpo
+como `{"error": "Rate limit exceeded: 3 per 1 minute"}`. Esto se verificó
+realizando peticiones repetidas contra `/auth/register` y `POST /loans` (ver
+sección de pruebas funcionales).
+
 ## Migraciones con Alembic
 
 El esquema de la base de datos se gestiona con **Alembic** en lugar de `Base.metadata.create_all()`. `alembic/env.py` importa la `Base` y los modelos de `app/` para que `--autogenerate` detecte los cambios.
@@ -167,6 +290,14 @@ La migración inicial (`create devices and loans tables`) crea las tablas `users
    pip install -r requirements.txt
    ```
 
+4. Configurar las variables de entorno:
+
+   ```bash
+   cp .env.example .env
+   # Edita .env y reemplaza SECRET_KEY por un valor propio, por ejemplo:
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
 ## Ejecución del servidor
 
 Desde la raíz del proyecto (`device_systems/`):
@@ -187,6 +318,14 @@ de levantar el servidor por primera vez (o después de modificar un modelo).
 La API quedará disponible en `http://127.0.0.1:8000` y la documentación interactiva (Swagger UI) en `http://127.0.0.1:8000/docs`.
 
 ## Tabla de endpoints
+
+### Auth
+
+| Método | Endpoint         | Descripción                                                   | Rate limit  |
+|--------|-------------------|----------------------------------------------------------------|-------------|
+| POST   | `/auth/register`  | Registra un usuario con contraseña segura (hash bcrypt)        | 3/minuto    |
+| POST   | `/auth/login`      | Autentica y retorna un token JWT (`access_token`, `bearer`)    | 5/minuto    |
+| GET    | `/auth/me`         | Retorna los datos del usuario dueño del token (requiere token) | —           |
 
 ### Users
 
@@ -402,12 +541,15 @@ Si el préstamo ya había sido devuelto, la API responde `409 Conflict`:
 ## Códigos de estado usados
 
 - **200 OK:** Petición procesada correctamente (GET, PUT, PATCH, incluida la devolución de un préstamo).
-- **201 Created:** Registro creado de forma exitosa (POST de usuarios, dispositivos o préstamos).
+- **201 Created:** Registro creado de forma exitosa (POST de usuarios, dispositivos, préstamos o registro en `/auth/register`).
 - **204 No Content:** Usuario o dispositivo eliminado correctamente (DELETE).
-- **400 Bad Request:** Error del cliente (ej. correo o número de serie duplicado, envío de datos inválidos o PATCH vacío).
+- **400 Bad Request:** Error del cliente (ej. correo o número de serie duplicado, envío de datos inválidos, PATCH vacío, o login/registro con correo repetido).
+- **401 Unauthorized:** No se envió token, el token es inválido, o la contraseña de login es incorrecta.
+- **403 Forbidden:** El usuario está autenticado pero su rol no tiene permiso para la operación (ej. un `user` intentando crear un dispositivo).
 - **404 Not Found:** Recurso no encontrado (ej. usuario, dispositivo o préstamo inexistente).
 - **409 Conflict:** Regla de negocio incumplida (ej. intentar prestar un dispositivo no disponible, o devolver un préstamo que ya fue devuelto).
-- **422 Unprocessable Entity:** Error arrojado por Pydantic al fallar las validaciones de esquema (ej. `name` con menos de 3 caracteres, `device_type` fuera del enum permitido).
+- **422 Unprocessable Entity:** Error arrojado por Pydantic al fallar las validaciones de esquema (ej. `name` con menos de 3 caracteres, contraseña débil, `device_type` fuera del enum permitido).
+- **429 Too Many Requests:** Se superó el límite de peticiones (rate limiting) configurado para el endpoint.
 
 ## Explicación breve del uso de Depends()
 
@@ -425,40 +567,58 @@ HTTP, delegando toda interacción con la base de datos a `user_service`.
 ## Explicación del manejo de errores implementado
 
 El manejo de errores se gestiona utilizando la clase `HTTPException` de FastAPI. Esto permite interceptar flujos incorrectos y devolver respuestas HTTP claras.
-- **Validaciones de negocio (400):** Se valida de forma manual que no se puedan crear o actualizar usuarios/dispositivos con un correo o número de serie que ya pertenezca a otro registro. También se controla que no se envíen peticiones PATCH vacías.
+- **Validaciones de negocio (400):** Se valida de forma manual que no se puedan crear o actualizar usuarios/dispositivos con un correo o número de serie que ya pertenezca a otro registro, ni registrar dos veces el mismo correo en `/auth/register`. También se controla que no se envíen peticiones PATCH vacías.
+- **Autenticación (401):** `get_current_user` responde `401 Unauthorized` si no se envía token, el token es inválido/expiró, o el usuario del token ya no existe. `POST /auth/login` también responde `401` si el correo o la contraseña son incorrectos.
+- **Autorización (403):** `require_roles(...)` responde `403 Forbidden` cuando el usuario está autenticado correctamente pero su rol no tiene permiso para la operación solicitada (ej. un `user` intentando crear un dispositivo, reservado a `admin`/`support`).
 - **Validación de existencia (404):** Antes de ejecutar operaciones `GET`, `PUT`, `PATCH` o `DELETE` sobre un ID específico (de usuario, dispositivo o préstamo), el sistema verifica que el registro exista; de lo contrario, detiene el proceso inmediatamente devolviendo un error de recurso no encontrado.
 - **Reglas de negocio incumplidas (409):** Al crear un préstamo, se valida que el dispositivo esté disponible (`is_available = True`); si no lo está, se responde `409 Conflict`. Lo mismo ocurre si se intenta devolver un préstamo que ya tiene estado `returned`.
+- **Validación de esquema (422):** Pydantic v2 rechaza automáticamente contraseñas débiles, correos con formato inválido, roles fuera del enum permitido, etc., mediante `Field()` y `field_validator`.
+- **Rate limiting (429):** `slowapi` intercepta las peticiones que superan el límite configurado por endpoint y responde `429 Too Many Requests` antes de que la petición llegue a la lógica de negocio.
 
 ## Documentación Swagger/OpenAPI (`/docs`, `/redoc`)
 
-Los endpoints están organizados en la documentación automática mediante tres
-`tags`: **Users**, **Devices** y **Loans**. Cada `path operation` incluye
-`summary` y `response_description` (por ejemplo, en `POST /loans` y
+Los endpoints están organizados en la documentación automática mediante cinco
+`tags`: **Auth**, **Users**, **Devices**, **Loans** y **Security** (este
+último expone `GET /security/policy`, un resumen no sensible de la
+configuración de seguridad activa). Cada `path operation` incluye `summary`
+y `response_description` (por ejemplo, en `POST /loans` y
 `PATCH /loans/{loan_id}/return`) para explicar qué hace el endpoint y qué
 representa cada código de respuesta, además de los `description` definidos
-en los `Query()` de los filtros (`device_type`, `is_available`, `search`,
-`status`, `user_email`, etc.) y en los campos de los schemas Pydantic.
+en los `Query()` de los filtros y en los campos de los schemas Pydantic.
 
-## Capturas de Swagger UI
+Como la API usa `OAuth2PasswordBearer`, Swagger UI muestra automáticamente el
+botón **Authorize** 🔓: al hacer login (o pegar un token ya obtenido), todas
+las peticiones de prueba dentro de `/docs` incluyen el header
+`Authorization: Bearer <token>` automáticamente, lo que permite probar las
+rutas protegidas directamente desde el navegador.
 
-## 📸 Evidencias de Ejecución y Pruebas (Swagger UI)
+## Capturas y evidencias
 
-A continuación se muestran las capturas de pantalla que validan el correcto funcionamiento de la API (`device_systems`), abarcando la vista general, respuestas exitosas y el manejo de errores:
+Esta actividad (EV11) exige documentar el proyecto con capturas reales. Se
+recomienda incluir aquí, como imágenes dentro de `assets/`, evidencia de:
 
-### 1. Vista General de la API
+- [ ] Estructura del proyecto (árbol de carpetas `app/auth`, `app/middlewares`, etc.).
+- [ ] Migración de Alembic aplicada (`alembic upgrade head` en consola).
+- [ ] Registro de usuario exitoso (`POST /auth/register`, `201`).
+- [ ] Login y token generado (`POST /auth/login`, `200` con `access_token`).
+- [ ] Respuesta de `GET /auth/me`.
+- [ ] Acceso a una ruta protegida sin token (`401`).
+- [ ] Acceso con un rol no permitido (`403`), por ejemplo un `user` en `POST /devices`.
+- [ ] Swagger/OpenAPI con el botón **Authorize** y el esquema `OAuth2PasswordBearer`.
+- [ ] Cabeceras del middleware (`X-App-Name`, `X-Process-Time`, `X-Request-ID`) en una respuesta.
+- [ ] Prueba de rate limiting activado (`429 Too Many Requests`).
+
+### Capturas heredadas (EV07)
+
+Las siguientes capturas corresponden a la primera versión del proyecto (API
+en memoria, sin base de datos ni seguridad) y se conservan como referencia
+histórica:
+
 ![Vista General de Swagger](assets/swagger_general.png)
-
-### 2. Respuesta Exitosa (Creación de Usuario - 201 Created)
 ![Prueba Exitosa](assets/swagger_success.png)
-
-### 3. Manejo de Errores (Correo Duplicado - 400 Bad Request)
 ![Manejo de Errores](assets/swagger_error.png)
 
-> Las capturas anteriores corresponden a la versión en memoria (EV07). Se
-> recomienda regenerarlas contra la versión actual (EV10), con los tres
-> tags **Users**, **Devices** y **Loans** visibles en `/docs`.
-
-## Reflexión sobre el uso de FastAPI, SQLAlchemy y Alembic
+## Reflexión sobre el uso de FastAPI, SQLAlchemy, Alembic y seguridad
 
 FastAPI permite construir APIs REST de forma rápida y segura gracias a su
 integración nativa con Pydantic para la validación de datos, la generación
@@ -491,3 +651,36 @@ puede prestarse dos veces mientras esté activo un préstamo) y construir
 consultas con `join()` que devuelven, en una sola respuesta, información
 combinada de varias tablas (`LoanDetailResponse`), algo mucho más parecido a
 cómo se construyen APIs backend en un entorno profesional.
+
+## Reflexión final sobre la importancia de la seguridad en APIs REST
+
+Una API funcional no es una API segura, y esta actividad hizo evidente la
+diferencia. Antes de EV11, cualquiera que conociera la URL de `device_systems`
+podía crear, modificar o borrar usuarios y dispositivos sin restricción
+alguna; el sistema no distinguía quién hacía la petición ni con qué
+intención. Incorporar **autenticación** (saber quién eres) y **autorización**
+(saber qué puedes hacer) como capas separadas —primero validar el token,
+luego validar el rol— refleja cómo se diseña el control de acceso en
+sistemas reales: nunca se confía en el cliente, siempre se verifica en el
+servidor.
+
+El **hash de contraseñas** con bcrypt fue igual de importante: si la base de
+datos se filtrara, un atacante no obtendría las contraseñas reales, solo
+hashes computacionalmente costosos de revertir. Guardar contraseñas en texto
+plano —algo tentador por simplicidad— es uno de los errores de seguridad más
+comunes y más graves en aplicaciones reales.
+
+El **rate limiting** enseñó que la disponibilidad también es seguridad: sin
+límites, un endpoint como `/auth/login` es un blanco fácil para ataques de
+fuerza bruta, y `/auth/register` podría usarse para saturar la base de datos
+con cuentas falsas. Limitar peticiones por IP no reemplaza otras defensas,
+pero reduce drásticamente el costo de estos ataques automatizados.
+
+Finalmente, **CORS** y el **middleware de trazabilidad** mostraron que la
+seguridad no es solo "bloquear accesos": también es controlar con qué
+sistemas puede hablar la API (evitando que cualquier sitio web use las
+credenciales de un usuario en su nombre) y poder **auditar** qué pasó, cuándo
+y con qué resultado, gracias al `X-Request-ID` y al registro de cada
+petición. En conjunto, estas capas no buscan hacer la API "inhackeable"
+—ningún sistema lo es—, sino reducir la superficie de ataque, limitar el daño
+si algo falla, y dejar evidencia para investigar cuando ocurre.
