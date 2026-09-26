@@ -6,6 +6,7 @@ personalizado y rate limiting) para la gestión de **usuarios**,
 **dispositivos** y **préstamos** dentro del sistema `device_systems`.
 
 Proyecto realizado para las actividades:
+
 - **GA1-220501096-01-AA1-EV07 – Fundamentos de FastAPI: API REST para Gestión de Usuarios** (SENA, ADSO).
 - **GA1-220501096-01-AA1-EV09 – FastAPI con SQLAlchemy: Persistencia de Datos y CRUD sobre Base de Datos** (SENA, ADSO).
 - **GA1-220501096-01-AA1-EV10 – FastAPI Avanzado: Migraciones con Alembic, Asociaciones de Modelos y Consultas con Joins** (SENA, ADSO).
@@ -78,51 +79,51 @@ El **modelo SQLAlchemy** (`app/models/user_model.py`) define la estructura real
 de la tabla `users` en la base de datos, incluyendo sus restricciones a nivel
 de columna:
 
-| Campo        | Tipo SQLAlchemy | Restricción                              |
-|--------------|------------------|-------------------------------------------|
-| `id`         | Integer          | Primary Key, index                        |
-| `name`       | String(50)       | `nullable=False`                          |
-| `email`      | String           | `unique=True`, `nullable=False`, index    |
-| `role`       | String           | `nullable=False`                          |
-| `is_active`  | Boolean          | `default=True`, `nullable=False`          |
-| `created_at` | DateTime         | `default=datetime.utcnow`, `nullable=False` |
+| Campo        | Tipo SQLAlchemy | Restricción                                 |
+| ------------ | --------------- | ------------------------------------------- |
+| `id`         | Integer         | Primary Key, index                          |
+| `name`       | String(50)      | `nullable=False`                            |
+| `email`      | String          | `unique=True`, `nullable=False`, index      |
+| `role`       | String          | `nullable=False`                            |
+| `is_active`  | Boolean         | `default=True`, `nullable=False`            |
+| `created_at` | DateTime        | `default=datetime.utcnow`, `nullable=False` |
 
 Los **schemas Pydantic** (`app/schemas/user_schema.py`) son independientes del
 modelo de base de datos y controlan la validación de entrada y el formato de
 salida de la API:
 
-| Schema         | Uso                                    | Validaciones                                                    |
-|----------------|-----------------------------------------|-------------------------------------------------------------------|
-| `UserCreate`   | Cuerpo de `POST /users`                | `name` (mín. 3 car.), `email` (formato válido), `role` (enum)    |
-| `UserUpdate`   | Cuerpo de `PUT /users/{id}`            | Igual a `UserCreate`, reemplazo completo                          |
-| `UserPatch`    | Cuerpo de `PATCH /users/{id}`          | Todos los campos opcionales                                       |
-| `UserResponse` | Respuesta de la API                    | Incluye `id` y `created_at` generados por la base de datos        |
+| Schema         | Uso                           | Validaciones                                                  |
+| -------------- | ----------------------------- | ------------------------------------------------------------- |
+| `UserCreate`   | Cuerpo de `POST /users`       | `name` (mín. 3 car.), `email` (formato válido), `role` (enum) |
+| `UserUpdate`   | Cuerpo de `PUT /users/{id}`   | Igual a `UserCreate`, reemplazo completo                      |
+| `UserPatch`    | Cuerpo de `PATCH /users/{id}` | Todos los campos opcionales                                   |
+| `UserResponse` | Respuesta de la API           | Incluye `id` y `created_at` generados por la base de datos    |
 
 El campo `role` se valida contra el enum `RoleEnum`, que solo admite los
 valores `admin`, `support` o `user`.
 
 ### Modelo `Device`
 
-| Campo           | Tipo SQLAlchemy | Restricción                              |
-|-----------------|------------------|-------------------------------------------|
-| `id`            | Integer          | Primary Key, index                        |
-| `name`          | String(100)      | `nullable=False`                          |
-| `serial_number` | String           | `unique=True`, `nullable=False`, index    |
-| `device_type`   | String           | `nullable=False` (enum: laptop, tablet, proyector, camara, router, monitor) |
-| `brand`         | String           | Opcional                                  |
-| `is_available`  | Boolean          | `default=True`, `nullable=False`          |
-| `created_at`    | DateTime         | `default=datetime.utcnow`, `nullable=False` |
+| Campo           | Tipo SQLAlchemy | Restricción                                                                 |
+| --------------- | --------------- | --------------------------------------------------------------------------- |
+| `id`            | Integer         | Primary Key, index                                                          |
+| `name`          | String(100)     | `nullable=False`                                                            |
+| `serial_number` | String          | `unique=True`, `nullable=False`, index                                      |
+| `device_type`   | String          | `nullable=False` (enum: laptop, tablet, proyector, camara, router, monitor) |
+| `brand`         | String          | Opcional                                                                    |
+| `is_available`  | Boolean         | `default=True`, `nullable=False`                                            |
+| `created_at`    | DateTime        | `default=datetime.utcnow`, `nullable=False`                                 |
 
 ### Modelo `Loan`
 
-| Campo         | Tipo SQLAlchemy | Restricción                                      |
-|---------------|------------------|----------------------------------------------------|
-| `id`          | Integer          | Primary Key, index                                 |
-| `user_id`     | Integer          | `ForeignKey("users.id")`, `nullable=False`, index   |
-| `device_id`   | Integer          | `ForeignKey("devices.id")`, `nullable=False`, index |
-| `loan_date`   | DateTime         | `default=datetime.utcnow`, `nullable=False`         |
-| `return_date` | DateTime         | Opcional (se asigna al devolver el dispositivo)     |
-| `status`      | String           | `nullable=False` (`active`, `returned`, `overdue`)  |
+| Campo         | Tipo SQLAlchemy | Restricción                                         |
+| ------------- | --------------- | --------------------------------------------------- |
+| `id`          | Integer         | Primary Key, index                                  |
+| `user_id`     | Integer         | `ForeignKey("users.id")`, `nullable=False`, index   |
+| `device_id`   | Integer         | `ForeignKey("devices.id")`, `nullable=False`, index |
+| `loan_date`   | DateTime        | `default=datetime.utcnow`, `nullable=False`         |
+| `return_date` | DateTime        | Opcional (se asigna al devolver el dispositivo)     |
+| `status`      | String          | `nullable=False` (`active`, `returned`, `overdue`)  |
 
 ## Asociaciones entre modelos
 
@@ -184,19 +185,19 @@ recibir cada petición protegida.
 
 Rutas protegidas:
 
-| Ruta                          | Protección requerida     |
-|--------------------------------|---------------------------|
-| `GET /users`                  | Usuario autenticado       |
-| `GET /users/{user_id}`        | Usuario autenticado       |
-| `POST /users`, `PUT`, `PATCH`, `DELETE /users/{id}` | Admin |
-| `POST /devices`               | Admin o support            |
-| `PUT /devices/{device_id}`    | Admin o support            |
-| `PATCH /devices/{device_id}`  | Admin o support            |
-| `DELETE /devices/{device_id}` | Admin                      |
-| `POST /loans`                 | Usuario autenticado        |
-| `GET /loans`, `GET /loans/details` | Admin o support        |
-| `GET /loans/{loan_id}`        | Usuario autenticado        |
-| `PATCH /loans/{loan_id}/return` | Admin o support           |
+| Ruta                                                | Protección requerida |
+| --------------------------------------------------- | -------------------- |
+| `GET /users`                                        | Usuario autenticado  |
+| `GET /users/{user_id}`                              | Usuario autenticado  |
+| `POST /users`, `PUT`, `PATCH`, `DELETE /users/{id}` | Admin                |
+| `POST /devices`                                     | Admin o support      |
+| `PUT /devices/{device_id}`                          | Admin o support      |
+| `PATCH /devices/{device_id}`                        | Admin o support      |
+| `DELETE /devices/{device_id}`                       | Admin                |
+| `POST /loans`                                       | Usuario autenticado  |
+| `GET /loans`, `GET /loans/details`                  | Admin o support      |
+| `GET /loans/{loan_id}`                              | Usuario autenticado  |
+| `PATCH /loans/{loan_id}/return`                     | Admin o support      |
 
 ### CORS
 
@@ -232,11 +233,11 @@ de estado y el tiempo de cada petición procesada.
 límites configurados son:
 
 | Endpoint              | Límite                  |
-|------------------------|--------------------------|
-| `POST /auth/login`     | 5 solicitudes / minuto   |
-| `POST /auth/register`  | 3 solicitudes / minuto   |
-| `GET /users`           | 30 solicitudes / minuto  |
-| `POST /loans`          | 10 solicitudes / minuto  |
+| --------------------- | ----------------------- |
+| `POST /auth/login`    | 5 solicitudes / minuto  |
+| `POST /auth/register` | 3 solicitudes / minuto  |
+| `GET /users`          | 30 solicitudes / minuto |
+| `POST /loans`         | 10 solicitudes / minuto |
 
 Al superar el límite, la API responde `429 Too Many Requests` con un cuerpo
 como `{"error": "Rate limit exceeded: 3 per 1 minute"}`. Esto se verificó
@@ -321,58 +322,58 @@ La API quedará disponible en `http://127.0.0.1:8000` y la documentación intera
 
 ### Auth
 
-| Método | Endpoint         | Descripción                                                   | Rate limit  |
-|--------|-------------------|----------------------------------------------------------------|-------------|
-| POST   | `/auth/register`  | Registra un usuario con contraseña segura (hash bcrypt)        | 3/minuto    |
-| POST   | `/auth/login`      | Autentica y retorna un token JWT (`access_token`, `bearer`)    | 5/minuto    |
-| GET    | `/auth/me`         | Retorna los datos del usuario dueño del token (requiere token) | —           |
+| Método | Endpoint         | Descripción                                                    | Rate limit |
+| ------ | ---------------- | -------------------------------------------------------------- | ---------- |
+| POST   | `/auth/register` | Registra un usuario con contraseña segura (hash bcrypt)        | 3/minuto   |
+| POST   | `/auth/login`    | Autentica y retorna un token JWT (`access_token`, `bearer`)    | 5/minuto   |
+| GET    | `/auth/me`       | Retorna los datos del usuario dueño del token (requiere token) | —          |
 
 ### Users
 
-| Método | Endpoint                | Descripción                                     |
-|--------|--------------------------|-------------------------------------------------|
-| GET    | `/`                      | Verifica el estado del servicio                 |
-| GET    | `/users`                 | Lista todos los usuarios                        |
-| GET    | `/users?role=admin`      | Filtra usuarios por rol                         |
-| GET    | `/users?is_active=true`  | Filtra usuarios por estado activo/inactivo      |
+| Método | Endpoint                 | Descripción                                              |
+| ------ | ------------------------ | -------------------------------------------------------- |
+| GET    | `/`                      | Verifica el estado del servicio                          |
+| GET    | `/users`                 | Lista todos los usuarios                                 |
+| GET    | `/users?role=admin`      | Filtra usuarios por rol                                  |
+| GET    | `/users?is_active=true`  | Filtra usuarios por estado activo/inactivo               |
 | GET    | `/users?order_by=-name`  | Ordena por `name`, `-name`, `created_at` o `-created_at` |
-| GET    | `/users/{user_id}`       | Consulta un usuario por su ID                   |
-| GET    | `/users/{user_id}/loans` | Consulta los préstamos de un usuario (join)     |
-| POST   | `/users`                 | Registra un nuevo usuario                       |
-| PUT    | `/users/{user_id}`       | Actualiza completamente un usuario existente    |
-| PATCH  | `/users/{user_id}`       | Actualiza parcialmente los datos de un usuario  |
-| DELETE | `/users/{user_id}`       | Elimina un usuario del sistema                  |
+| GET    | `/users/{user_id}`       | Consulta un usuario por su ID                            |
+| GET    | `/users/{user_id}/loans` | Consulta los préstamos de un usuario (join)              |
+| POST   | `/users`                 | Registra un nuevo usuario                                |
+| PUT    | `/users/{user_id}`       | Actualiza completamente un usuario existente             |
+| PATCH  | `/users/{user_id}`       | Actualiza parcialmente los datos de un usuario           |
+| DELETE | `/users/{user_id}`       | Elimina un usuario del sistema                           |
 
 ### Devices
 
-| Método | Endpoint                          | Descripción                                       |
-|--------|------------------------------------|----------------------------------------------------|
-| GET    | `/devices`                        | Lista todos los dispositivos                        |
-| GET    | `/devices?device_type=laptop`     | Filtra por tipo de dispositivo                       |
-| GET    | `/devices?is_available=true`      | Filtra por disponibilidad                            |
-| GET    | `/devices?brand=lenovo`           | Filtra por marca (coincidencia parcial)              |
-| GET    | `/devices?search=thinkpad`        | Búsqueda libre por nombre, serie o marca (`ilike`)   |
-| GET    | `/devices/{device_id}`            | Consulta un dispositivo por su ID                    |
-| GET    | `/devices/{device_id}/loans`      | Consulta el historial de préstamos del dispositivo (join) |
-| POST   | `/devices`                        | Registra un nuevo dispositivo                        |
-| PUT    | `/devices/{device_id}`            | Actualiza completamente un dispositivo               |
-| PATCH  | `/devices/{device_id}`            | Actualiza parcialmente un dispositivo                |
-| DELETE | `/devices/{device_id}`            | Elimina un dispositivo                               |
+| Método | Endpoint                      | Descripción                                               |
+| ------ | ----------------------------- | --------------------------------------------------------- |
+| GET    | `/devices`                    | Lista todos los dispositivos                              |
+| GET    | `/devices?device_type=laptop` | Filtra por tipo de dispositivo                            |
+| GET    | `/devices?is_available=true`  | Filtra por disponibilidad                                 |
+| GET    | `/devices?brand=lenovo`       | Filtra por marca (coincidencia parcial)                   |
+| GET    | `/devices?search=thinkpad`    | Búsqueda libre por nombre, serie o marca (`ilike`)        |
+| GET    | `/devices/{device_id}`        | Consulta un dispositivo por su ID                         |
+| GET    | `/devices/{device_id}/loans`  | Consulta el historial de préstamos del dispositivo (join) |
+| POST   | `/devices`                    | Registra un nuevo dispositivo                             |
+| PUT    | `/devices/{device_id}`        | Actualiza completamente un dispositivo                    |
+| PATCH  | `/devices/{device_id}`        | Actualiza parcialmente un dispositivo                     |
+| DELETE | `/devices/{device_id}`        | Elimina un dispositivo                                    |
 
 ### Loans
 
-| Método | Endpoint                          | Descripción                                                    |
-|--------|------------------------------------|-----------------------------------------------------------------|
-| GET    | `/loans`                          | Lista préstamos con datos de usuario y dispositivo (join)       |
-| GET    | `/loans/details`                  | Igual a `/loans`, pensado para consultas explícitas con detalle |
-| GET    | `/loans?status=active`            | Filtra préstamos por estado                                     |
-| GET    | `/loans?user_id=1`                | Filtra préstamos por usuario                                    |
-| GET    | `/loans?device_id=1`              | Filtra préstamos por dispositivo                                |
-| GET    | `/loans?user_email=ana@sena.edu.co` | Filtra por correo del usuario (coincidencia parcial)           |
-| GET    | `/loans?device_type=laptop`       | Filtra por tipo de dispositivo prestado                         |
-| GET    | `/loans/{loan_id}`                | Consulta un préstamo por su ID (con datos relacionados)         |
-| POST   | `/loans`                          | Crea un préstamo (valida usuario, dispositivo y disponibilidad) |
-| PATCH  | `/loans/{loan_id}/return`         | Marca el préstamo como devuelto y libera el dispositivo         |
+| Método | Endpoint                            | Descripción                                                     |
+| ------ | ----------------------------------- | --------------------------------------------------------------- |
+| GET    | `/loans`                            | Lista préstamos con datos de usuario y dispositivo (join)       |
+| GET    | `/loans/details`                    | Igual a `/loans`, pensado para consultas explícitas con detalle |
+| GET    | `/loans?status=active`              | Filtra préstamos por estado                                     |
+| GET    | `/loans?user_id=1`                  | Filtra préstamos por usuario                                    |
+| GET    | `/loans?device_id=1`                | Filtra préstamos por dispositivo                                |
+| GET    | `/loans?user_email=ana@sena.edu.co` | Filtra por correo del usuario (coincidencia parcial)            |
+| GET    | `/loans?device_type=laptop`         | Filtra por tipo de dispositivo prestado                         |
+| GET    | `/loans/{loan_id}`                  | Consulta un préstamo por su ID (con datos relacionados)         |
+| POST   | `/loans`                            | Crea un préstamo (valida usuario, dispositivo y disponibilidad) |
+| PATCH  | `/loans/{loan_id}/return`           | Marca el préstamo como devuelto y libera el dispositivo         |
 
 ## Ejemplos de peticiones
 
@@ -455,7 +456,8 @@ curl -X PATCH "http://127.0.0.1:8000/users/1"   -H "Content-Type: application/js
 ```bash
 curl -X DELETE "http://127.0.0.1:8000/users/1"
 ```
-*(Respuesta: `204 No Content` - Sin cuerpo de respuesta)*
+
+_(Respuesta: `204 No Content` - Sin cuerpo de respuesta)_
 
 ### Error por correo duplicado (`400 Bad Request`)
 
@@ -519,7 +521,12 @@ Respuesta:
     "loan_date": "2026-01-01T10:00:00",
     "return_date": null,
     "user": { "id": 1, "name": "Ana Pérez", "email": "ana@sena.edu.co" },
-    "device": { "id": 1, "name": "Laptop Lenovo ThinkPad", "serial_number": "LEN-2024-001", "device_type": "laptop" }
+    "device": {
+      "id": 1,
+      "name": "Laptop Lenovo ThinkPad",
+      "serial_number": "LEN-2024-001",
+      "device_type": "laptop"
+    }
   }
 ]
 ```
@@ -567,6 +574,7 @@ HTTP, delegando toda interacción con la base de datos a `user_service`.
 ## Explicación del manejo de errores implementado
 
 El manejo de errores se gestiona utilizando la clase `HTTPException` de FastAPI. Esto permite interceptar flujos incorrectos y devolver respuestas HTTP claras.
+
 - **Validaciones de negocio (400):** Se valida de forma manual que no se puedan crear o actualizar usuarios/dispositivos con un correo o número de serie que ya pertenezca a otro registro, ni registrar dos veces el mismo correo en `/auth/register`. También se controla que no se envíen peticiones PATCH vacías.
 - **Autenticación (401):** `get_current_user` responde `401 Unauthorized` si no se envía token, el token es inválido/expiró, o el usuario del token ya no existe. `POST /auth/login` también responde `401` si el correo o la contraseña son incorrectos.
 - **Autorización (403):** `require_roles(...)` responde `403 Forbidden` cuando el usuario está autenticado correctamente pero su rol no tiene permiso para la operación solicitada (ej. un `user` intentando crear un dispositivo, reservado a `admin`/`support`).
@@ -684,3 +692,81 @@ y con qué resultado, gracias al `X-Request-ID` y al registro de cada
 petición. En conjunto, estas capas no buscan hacer la API "inhackeable"
 —ningún sistema lo es—, sino reducir la superficie de ataque, limitar el daño
 si algo falla, y dejar evidencia para investigar cuando ocurre.
+
+## 📸 Evidencias del proyecto
+
+### Estructura del proyecto
+
+![Estructura del proyecto](assets/estructura.png)
+
+### Registro de usuario
+
+![Registro de usuario](assets/registrouser.png)
+
+### Contraseña débil
+
+![Validación de contraseña débil](assets/contraseñadebil.png)
+
+### Correo duplicado
+
+![Validación de correo duplicado](assets/correoduplicado.png)
+
+### Login
+
+![Login](assets/login.png)
+
+### Login erróneo
+
+![Login erróneo](assets/loginerroneo.png)
+
+### Autenticación
+
+![Autenticación](assets/authme.png)
+
+### Dispositivo creado
+
+![Dispositivo creado](assets/dispositivocreado.png)
+
+### Eliminación de dispositivo
+
+![Eliminar dispositivo](assets/eliminardispositivo.png)
+
+### Sin token
+
+![Acceso sin token](assets/sintoken.png)
+
+### Permisos — 401
+
+![Error 401 de permisos](assets/401permisos.png)
+
+### Endpoints en Swagger
+
+![Endpoints de Swagger](assets/endpointsswagger.png)
+
+### Swagger
+
+![Swagger](assets/swagger_general.png)
+
+### Swagger exitoso
+
+![Swagger exitoso](assets/swagger_success.png)
+
+### Swagger con error
+
+![Swagger con error](assets/swagger_error.png)
+
+### CORS
+
+![Configuración CORS](assets/cors.png)
+
+### Middleware
+
+![Middleware](assets/middleware.png)
+
+### Rate Limit
+
+![Rate Limit](assets/ratelimite.png)
+
+### Alembic
+
+![Alembic](assets/alembic.png)
